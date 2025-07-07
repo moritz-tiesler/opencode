@@ -240,6 +240,7 @@ func (o *openaiClient) send(ctx context.Context, messages []message.Message, too
 
 func (o *openaiClient) stream(ctx context.Context, messages []message.Message, tools []tools.BaseTool) <-chan ProviderEvent {
 	params := o.preparedParams(o.convertMessages(messages), o.convertTools(tools))
+	// todo moritz: check how include usage works with streamed content
 	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
 		IncludeUsage: openai.Bool(true),
 	}
@@ -267,7 +268,13 @@ func (o *openaiClient) stream(ctx context.Context, messages []message.Message, t
 
 			for openaiStream.Next() {
 				chunk := openaiStream.Current()
-				acc.AddChunk(chunk)
+				chunkAdded := acc.AddChunk(chunk)
+
+				logging.Debug("openai chunk", "chunk", chunk)
+				logging.Debug("chunk added", "chunkAdded", chunkAdded)
+				if !chunkAdded {
+					logging.Debug("chunk not added", "chunk", chunk)
+				}
 
 				for _, choice := range chunk.Choices {
 					if choice.Delta.Content != "" {
@@ -279,8 +286,9 @@ func (o *openaiClient) stream(ctx context.Context, messages []message.Message, t
 					}
 				}
 			}
-
+			logging.Debug("completion acc", "acc", acc)
 			err := openaiStream.Err()
+			logging.Debug("err after acc", "err", err)
 			if err == nil || errors.Is(err, io.EOF) {
 				// Stream completed successfully
 				finishReason := o.finishReason(string(acc.ChatCompletion.Choices[0].FinishReason))
@@ -335,6 +343,7 @@ func (o *openaiClient) stream(ctx context.Context, messages []message.Message, t
 }
 
 func (o *openaiClient) shouldRetry(attempts int, err error) (bool, int64, error) {
+	logging.Debug("retry caused by", "err", err)
 	var apierr *openai.Error
 	if !errors.As(err, &apierr) {
 		return false, 0, err
@@ -381,16 +390,21 @@ func (o *openaiClient) toolCalls(completion openai.ChatCompletion) []message.Too
 	return toolCalls
 }
 
+// todo moritz: find out why chatcompletion does always report 0 token usage
+// maybe lmstudio server does not stream it
 func (o *openaiClient) usage(completion openai.ChatCompletion) TokenUsage {
 	cachedTokens := completion.Usage.PromptTokensDetails.CachedTokens
 	inputTokens := completion.Usage.PromptTokens - cachedTokens
 
-	return TokenUsage{
+	u := TokenUsage{
 		InputTokens:         inputTokens,
 		OutputTokens:        completion.Usage.CompletionTokens,
 		CacheCreationTokens: 0, // OpenAI doesn't provide this directly
 		CacheReadTokens:     cachedTokens,
 	}
+
+	logging.Debug("found usage", "usage", u)
+	return u
 }
 
 func WithOpenAIBaseURL(baseURL string) OpenAIOption {

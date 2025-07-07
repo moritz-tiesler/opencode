@@ -449,12 +449,14 @@ func (g *geminiClient) usage(resp *genai.GenerateContentResponse) TokenUsage {
 		return TokenUsage{}
 	}
 
-	return TokenUsage{
+	u := TokenUsage{
 		InputTokens:         int64(resp.UsageMetadata.PromptTokenCount),
 		OutputTokens:        int64(resp.UsageMetadata.CandidatesTokenCount),
 		CacheCreationTokens: 0, // Not directly provided by Gemini
 		CacheReadTokens:     int64(resp.UsageMetadata.CachedContentTokenCount),
 	}
+	logging.Debug("found usage", "usage", u)
+	return u
 }
 
 func WithGeminiDisableCache() GeminiOption {

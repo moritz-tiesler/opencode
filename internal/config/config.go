@@ -547,6 +547,11 @@ func validateAgent(cfg *Config, name AgentName, agent Agent) error {
 		} else {
 			updatedAgent.MaxTokens = MaxTokensFallbackDefault
 		}
+		logging.Warn("set to new max tokens value",
+			"agent", name,
+			"model", agent.Model,
+			"max_tokens", updatedAgent.MaxTokens)
+
 		cfg.Agents[name] = updatedAgent
 	} else if model.ContextWindow > 0 && agent.MaxTokens > model.ContextWindow/2 {
 		// Ensure max tokens doesn't exceed half the context window (reasonable limit)
